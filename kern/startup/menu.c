@@ -180,6 +180,17 @@ cmd_prog(int nargs, char **args)
 	return common_prog(nargs, args);
 }
 
+static
+int
+cmd_dth(int nargs, char **args)
+{
+       (void)nargs;
+       (void)args;
+
+       dbflags = DB_THREADS; 
+       return 0;
+}
+
 /*
  * Command for starting the system shell.
  */
@@ -426,6 +437,7 @@ showmenu(const char *name, const char *x[])
 }
 
 static const char *opsmenu[] = {
+       "[dth]     Enable thread debugging",
 	"[s]       Shell                     ",
 	"[p]       Other program             ",
 	"[mount]   Mount a filesystem        ",
@@ -536,7 +548,8 @@ static struct {
 	{ "?t",		cmd_testmenu },
 
 	/* operations */
-	{ "s",		cmd_shell },
+       { "dth",      cmd_dth },
+       { "s",		cmd_shell },
 	{ "p",		cmd_prog },
 	{ "mount",	cmd_mount },
 	{ "unmount",	cmd_unmount },
