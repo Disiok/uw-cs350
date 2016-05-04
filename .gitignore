@@ -1,0 +1,8 @@
+uw-testbin/
+testbin/
+sbin/
+bin/
+user/
+build/
+compile/
+*.mk
