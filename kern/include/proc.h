@@ -36,6 +36,8 @@
  * Note: curproc is defined by <current.h>.
  */
 
+#include "opt-A2.h"
+#include <types.h>
 #include <spinlock.h>
 #include <thread.h> /* required for struct threadarray */
 
@@ -69,6 +71,11 @@ struct proc {
 #endif
 
 	/* add more material here as needed */
+
+#if OPT_A2
+    pid_t p_pid;
+#endif /* OPT_A2 */
+
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

@@ -27,6 +27,7 @@
  * SUCH DAMAGE.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/syscall.h>
@@ -35,6 +36,8 @@
 #include <thread.h>
 #include <current.h>
 #include <syscall.h>
+#include <proc.h>
+#include <addrspace.h>
 
 
 /*
@@ -132,6 +135,11 @@ syscall(struct trapframe *tf)
 #endif // UW
 
 	    /* Add stuff here */
+#if OPT_A2
+    case SYS_fork:
+      err = sys_fork(tf, (pid_t *) &retval);
+      break;
+#endif /* OPT_A2 */
  
 	default:
 	  kprintf("Unknown syscall %d\n", callno);
@@ -176,8 +184,32 @@ syscall(struct trapframe *tf)
  *
  * Thus, you can trash it and do things another way if you prefer.
  */
+#if OPT_A2
+void 
+enter_forked_proces(void *tf_cp, 
+        unsigned long as_child)
+{
+    // copy trapframe onto kernel stack
+    struct trapframe tf_child = *(struct trapframe *) tf_cp; 
+
+    // set return value
+    tf_child.tf_v0 = 0;
+    // set status
+    tf_child.tf_a3 = 0;
+    // increment program counter
+    tf_child.tf_epc += 4;
+
+    // associate address space with new process
+    curproc_setas((struct addrspace *) as_child);
+    as_activate();
+
+    // enter usermode
+    mips_usermode(&tf_child);
+}
+#else
 void
 enter_forked_process(struct trapframe *tf)
 {
 	(void)tf;
 }
+#endif /* OPT_A2 */

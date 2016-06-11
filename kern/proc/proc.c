@@ -42,6 +42,7 @@
  * process that will have more than one thread is the kernel process.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <proc.h>
 #include <current.h>
@@ -50,6 +51,7 @@
 #include <vfs.h>
 #include <synch.h>
 #include <kern/fcntl.h>  
+#include <pid.h>
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -208,6 +210,10 @@ proc_bootstrap(void)
     panic("could not create no_proc_sem semaphore\n");
   }
 #endif // UW 
+
+#if OPT_A2
+  pid_assign_kern(kproc);
+#endif /* OPT_A2 */
 }
 
 /*
@@ -271,6 +277,9 @@ proc_create_runprogram(const char *name)
 	V(proc_count_mutex);
 #endif // UW
 
+#if OPT_A2
+    pid_assign_next(proc);
+#endif /* OPT_A2 */
 	return proc;
 }
 

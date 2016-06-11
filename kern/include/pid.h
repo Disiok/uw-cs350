@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2000, 2001, 2002, 2003, 2004, 2005, 2008, 2009
+ * Copyright (c) 2013
  *	The President and Fellows of Harvard College.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,52 +26,30 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#ifndef _SYSCALL_H_
-#define _SYSCALL_H_
+#ifndef _PID_H_
+#define _PID_H_
 
 #include "opt-A2.h"
-
-struct trapframe; /* from <machine/trapframe.h> */
-
-/*
- * The system call dispatcher.
- */
-
-void syscall(struct trapframe *tf);
-
-/*
- * Support functions.
- */
-
 #if OPT_A2
-void enter_forked_proces(void *tf_cp, unsigned long as_child);
-#else
-/* Helper for fork(). You write this. */
-void enter_forked_process(struct trapframe *tf);
+#include <synch.h>
+#include <types.h>
+#include <limits.h>
+#include <proc.h>
+
+struct pid_stat {
+    pid_t p_parent_pid;
+    int p_exitcode;
+    struct cv *p_cv;
+    
+};
+
+void pid_bootstrap(void);
+void pid_assign_kern(struct proc *proc_kern);
+void pid_assign_next(struct proc *proc_child);
+int pid_wait(pid_t pid, int *exitstatus);
+void pid_exit(int exitcode);
+void pid_fail(void);
+
+
 #endif /* OPT_A2 */
-
-/* Enter user mode. Does not return. */
-void enter_new_process(int argc, userptr_t argv, vaddr_t stackptr,
-		       vaddr_t entrypoint);
-
-
-/*
- * Prototypes for IN-KERNEL entry points for system call implementations.
- */
-
-int sys_reboot(int code);
-int sys___time(userptr_t user_seconds, userptr_t user_nanoseconds);
-
-#ifdef UW
-int sys_write(int fdesc,userptr_t ubuf,unsigned int nbytes,int *retval);
-void sys__exit(int exitcode);
-int sys_getpid(pid_t *retval);
-int sys_waitpid(pid_t pid, userptr_t status, int options, pid_t *retval);
-
-#endif // UW
-#if OPT_A2
-int sys_fork(struct trapframe *tf, pid_t *retval);
-#endif /* OPT_A2 */
-
-#endif /* _SYSCALL_H_ */
+#endif /* _PID_H_ */

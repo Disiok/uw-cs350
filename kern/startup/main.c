@@ -31,6 +31,7 @@
  * Main.
  */
 
+#include "opt-A2.h"
 #include <types.h>
 #include <kern/errno.h>
 #include <kern/reboot.h>
@@ -39,6 +40,9 @@
 #include <spl.h>
 #include <clock.h>
 #include <thread.h>
+#if OPT_A2
+#include <pid.h>
+#endif /* OPT_A2 */
 #include <proc.h>
 #include <current.h>
 #include <synch.h>
@@ -107,6 +111,9 @@ boot(void)
 
 	/* Early initialization. */
 	ram_bootstrap();
+#if OPT_A2
+    pid_bootstrap();
+#endif /* OPT_A2 */
 	proc_bootstrap();
 	thread_bootstrap();
 	hardclock_bootstrap();
