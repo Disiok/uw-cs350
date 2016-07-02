@@ -44,6 +44,11 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include "opt-A2.h"
+
+#if OPT_A2
+#include <copyinout.h>
+#endif /* OPT_A2 */
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -52,12 +57,22 @@
  * Calls vfs_open on progname and thus may destroy it.
  */
 int
+#if OPT_A2
+runprogram(char *progname, char ** args)
+#else
 runprogram(char *progname)
+#endif /* OPT_A2 */
 {
 	struct addrspace *as;
 	struct vnode *v;
 	vaddr_t entrypoint, stackptr;
 	int result;
+
+#if OPT_A2
+    vaddr_t *args_user;
+    size_t args_size;
+    size_t size;
+#endif /* OPT_A2 */
 
 	/* Open the file. */
 	result = vfs_open(progname, O_RDONLY, 0, &v);
@@ -97,9 +112,45 @@ runprogram(char *progname)
 		return result;
 	}
 
+#if OPT_A2
+    args_size = 0;
+    while (args[args_size] != NULL) {
+        args_size ++;
+    }
+
+    // copy argument strings into user space, and keep track of virtual address
+    args_user = (vaddr_t *) kmalloc(sizeof(vaddr_t) * (args_size + 1));
+    for (size_t i = 0; i < args_size; ++i) {
+        size = ROUNDUP(strlen(args[i]) + 1, 8);
+        stackptr -= size;
+        result = copyoutstr((const char *) args[i], (userptr_t) stackptr, size, &size);
+        if (result) {
+            kfree(args_user);
+            return result;
+        }
+
+        args_user[i] = stackptr;     
+    }
+    args_user[args_size] = (vaddr_t) NULL;
+    
+    // copy argument array of virtual address into user space
+    size = sizeof(vaddr_t) * (args_size + 1);
+    stackptr -= ROUNDUP(size, 8);
+    result = copyout((const void *) args_user, (userptr_t) stackptr, size);
+    if (result) {
+        kfree(args_user);
+    }
+
+	// warp to user mode
+	enter_new_process(args_size /*argc*/, 
+            (userptr_t) stackptr /*userspace addr of argv*/,
+            stackptr, 
+            entrypoint);
+#else
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  stackptr, entrypoint);
+#endif /* OPT_A2 */
 	
 	/* enter_new_process does not return. */
 	panic("enter_new_process returned\n");

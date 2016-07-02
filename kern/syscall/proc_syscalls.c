@@ -12,6 +12,8 @@
 #include <copyinout.h>
 #include <mips/trapframe.h>
 #include <pid.h>
+#include <vfs.h>
+#include <kern/fcntl.h>
 
   /* this implementation of sys__exit does not do anything with the exit code */
   /* this needs to be fixed to get exit() and waitpid() working properly */
@@ -168,5 +170,140 @@ sys_fork(struct trapframe *tf,
 
     return(0);
 }
+
+int sys_execv(const char *program, char **uargs) {
+    struct addrspace *as_new;
+    struct addrspace *as_old;
+	struct vnode *v;
+	vaddr_t entrypoint, stackptr;
+	int result;
+    size_t size;
+
+    char *program_kernel; 
+    size_t program_size;
+    char **uargs_kernel;
+    vaddr_t *uargs_user;
+    size_t uargs_size;
+
+    // ensure valid program and arguments
+    if (program == NULL || uargs == NULL) {
+        return(EFAULT);
+    }
+
+    // copy program from user space into kernel space
+    program_kernel = (char *) kmalloc(sizeof(char) * PATH_MAX); 
+    if (program_kernel == NULL) {
+        return(ENOMEM); 
+    }
+    result = copyinstr((const_userptr_t) program, program_kernel, PATH_MAX, &program_size);
+    if (result || program_size <= 1) {
+       kfree(program_kernel); 
+       return(EINVAL);
+    }
+
+    // copy arguments from user space into kernel space
+    uargs_size = 0;
+    while (uargs[uargs_size] != NULL) {
+        uargs_size ++;
+    }
+
+    uargs_kernel = (char **) kmalloc(sizeof(char *) * (uargs_size + 1));
+    for (size_t i = 0; i < uargs_size; ++i) {
+        uargs_kernel[i] = (char *) kmalloc(sizeof(char) * PATH_MAX);
+        result = copyinstr((const_userptr_t) uargs[i], uargs_kernel[i], PATH_MAX, &size);
+        if (result) {
+            kfree(program_kernel);
+            kfree(uargs_kernel);
+            return(EFAULT);
+        }
+    }
+    uargs_kernel[uargs_size] = NULL;
+    
+	// open the file
+	result = vfs_open(program_kernel, O_RDONLY, 0, &v);
+	if (result) {
+        kfree(program_kernel);
+        kfree(uargs_kernel);
+		return result;
+	}
+
+    // create new address space
+    as_new = as_create();
+    if (as_new == NULL) {
+        kfree(program_kernel);
+        kfree(uargs_kernel);
+        vfs_close(v);
+        return(ENOMEM);
+    }
+    
+    // set new address space, delete old address space, and activate new address space
+    as_old = curproc_setas(as_new);
+    as_destroy(as_old);
+    as_activate();
+
+    // load the executable
+	result = load_elf(v, &entrypoint);
+	if (result) {
+		// p_addrspace will go away when curproc is destroyed
+        kfree(program_kernel);
+        kfree(uargs_kernel);
+		vfs_close(v);
+		return result;
+	}
+
+    // done with the file now
+    vfs_close(v);
+
+    // define the user stack in the address space
+	result = as_define_stack(as_new, &stackptr);
+	if (result) {
+		// p_addrspace will go away when curproc is destroyed
+        kfree(program_kernel);
+        kfree(uargs_kernel);
+		return result;
+	}
+
+    // copy argument strings into user space, and keep track of virtual address
+    uargs_user = (vaddr_t *) kmalloc(sizeof(vaddr_t) * (uargs_size + 1));
+    for (size_t i = 0; i < uargs_size; ++i) {
+        size = ROUNDUP(strlen(uargs_kernel[i]) + 1, 8);
+        stackptr -= size;
+        result = copyoutstr((const char *) uargs_kernel[i], (userptr_t) stackptr, size, &size);
+        if (result) {
+            kfree(program_kernel);
+            kfree(uargs_kernel);
+            kfree(uargs_user);
+            return result;
+        }
+
+        uargs_user[i] = stackptr;     
+    }
+    uargs_user[uargs_size] = (vaddr_t) NULL;
+    
+    // copy argument array of virtual address into user space
+    size = sizeof(vaddr_t) * (uargs_size + 1);
+    stackptr -= ROUNDUP(size, 8);
+    result = copyout((const void *) uargs_user, (userptr_t) stackptr, size);
+    if (result) {
+        kfree(program_kernel);
+        kfree(uargs_kernel);
+        kfree(uargs_user);
+    }
+
+    // free kernel space program and arguments
+    kfree(program_kernel);
+    kfree(uargs_kernel);
+
+	// warp to user mode
+	enter_new_process(uargs_size /*argc*/, 
+            (userptr_t) stackptr /*userspace addr of argv*/,
+            stackptr, 
+            entrypoint);
+	
+	// enter_new_process does not return
+	panic("enter_new_process returned\n");
+	return(EINVAL);
+}
+
 #endif /* OPT_A2 */
 
