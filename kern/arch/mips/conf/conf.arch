@@ -72,6 +72,9 @@ machine mips file    vm/copyinout.c		# copyin/out et al.
 defoption   dumbvm
 machine mips optfile dumbvm    arch/mips/vm/dumbvm.c
 
+defoption smartvm
+machine mips optfile smartvm    arch/mips/vm/smartvm.c
+
 #
 # System call layer
 #
